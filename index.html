@@ -1508,7 +1508,7 @@
       announce("ENEMY BASE DESTROYED");
       hud.overlay.classList.remove("hidden");
       const scoreText = String(state.score).padStart(6, "0");
-      const shareUrl = "https://twitter.com/intent/tweet?text=" + encodeURIComponent("I escaped the polygon fortress in POLYGON RAID 88. SCORE " + scoreText + " #KGNINJA");
+      const shareUrl = "https://twitter.com/intent/tweet?url=" + encodeURIComponent("https://kg-ninja.github.io/SiranKeed/") + "&text=" + encodeURIComponent("I escaped the polygon fortress in POLYGON RAID 88. SCORE " + scoreText + " #KGNINJA");
       hud.overlay.querySelector(".title").innerHTML = "<h1>MISSION COMPLETE</h1><p>THE RAID FLEET RETURNS THROUGH THE STARS.</p><p>SCORE " + scoreText + "</p><p><a href='" + shareUrl + "' target='_blank' rel='noopener'>Share your score on X</a></p><p><a href='https://buymeacoffee.com/kgninja' target='_blank' rel='noopener'>If you enjoyed this game, please support development on Buy Me a Coffee.</a></p><div class='stage-select' aria-label='Stage select'><button type='button' data-stage='0'>1 SPACE FLEET</button><button type='button' data-stage='1'>2 ASTEROID BELT</button><button type='button' data-stage='2'>3 BASE TUNNEL</button></div><p class='key'>PRESS ENTER TO RESTART</p>";
       bindStageButtons();
       for (let i = 0; i < 36; i++) spawnExplosion((Math.random() - 0.5) * 8, -3 + Math.random() * 5, -34 - Math.random() * 12, 2, 0xe8d77b, 1.2);
@@ -2343,7 +2343,7 @@
             effect.dead = true;
             hud.overlay.classList.remove("hidden");
             const scoreText = String(state.score).padStart(6, "0");
-            const shareUrl = "https://twitter.com/intent/tweet?text=" + encodeURIComponent("I escaped the dying planet in POLYGON RAID 88. SCORE " + scoreText + " #KGNINJA");
+            const shareUrl = "https://twitter.com/intent/tweet?url=" + encodeURIComponent("https://kg-ninja.github.io/SiranKeed/") + "&text=" + encodeURIComponent("I escaped the dying planet in POLYGON RAID 88. SCORE " + scoreText + " #KGNINJA");
             hud.overlay.querySelector(".title").innerHTML = "<h1>MISSION COMPLETE</h1><p>ESCAPED THE DYING PLANET.</p><p>SCORE " + scoreText + "</p><p><a href='" + shareUrl + "' target='_blank' rel='noopener'>Share your score on X</a></p><p><a href='https://buymeacoffee.com/kgninja' target='_blank' rel='noopener'>If you enjoyed this game, please support development on Buy Me a Coffee.</a></p><div class='stage-select' aria-label='Stage select'><button type='button' data-stage='0'>1 SPACE FLEET</button><button type='button' data-stage='1'>2 ASTEROID BELT</button><button type='button' data-stage='2'>3 BASE TUNNEL</button></div><p class='key'>PRESS ENTER TO RESTART</p>";
             bindStageButtons();
             hud.stageName.textContent = "MISSION COMPLETE";
