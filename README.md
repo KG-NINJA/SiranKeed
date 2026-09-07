@@ -2,21 +2,33 @@
 
 Three.js single-file polygon rail shooter inspired by late-1980s low-poly arcade visuals.
 
+## Play and support
+
+全3ステージを無料で遊べるPC向けのキーボード操作ゲームです。
+
+- [ブラウザーで無料プレイ](https://kg-ninja.github.io/SiranKeed/)
+- [CraftNovaのゲームページ](https://craftnovagame.com/game/28)
+- [KGの開発を任意で応援する — Buy Me a Coffee](https://buymeacoffee.com/kgninja)
+
+支援はゲームの購入・機能のアンロックではありません。支援しなくても全ステージをプレイできます。支援先の支払方法や受付状態はリンク先で確認してください。
+
 ## Run
 
-Use a local HTTP server from `C:\Users\user\OneDrive\Desktop\three`.
+Clone or download this repository, then run a local HTTP server from the directory containing `index.html`:
 
 ```powershell
-python -m http.server 4177
+python -m http.server 4177 --bind 127.0.0.1
 ```
 
 Open:
 
 ```text
-http://localhost:4177/silpheed-88sr-shooter/
+http://127.0.0.1:4177/
 ```
 
-If the existing local server is already running on port `4177`, the same URL works.
+Keep the terminal open while playing. If port `4177` is in use, choose another port and update the URL. The original browser build downloads Three.js from a CDN, so an internet connection is required for that dependency.
+
+Requires Python 3 for this local launch method and a desktop browser with WebGL, ES modules, and import-map support. Touch controls, gamepad controls, pause, and saved progress are not implemented.
 
 ## Controls
 

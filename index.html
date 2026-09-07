@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>POLYGON RAID 88</title>
+  <meta name="description" content="KGの3ステージ・ローポリゴンシューティング。PCのキーボードで無料プレイ。気に入ったら開発を応援できます。" />
   <link rel="icon" href="data:," />
   <style>
     html, body {
@@ -93,8 +94,31 @@
         radial-gradient(circle at center, rgba(45, 232, 217, 0.12), rgba(0,0,0,0.9) 62%);
       background-size: 100% 4px, 100% 100%;
       z-index: 4;
+      overflow-y: auto;
     }
     #overlay.hidden { display: none; }
+    .menu { padding: 28px 0; }
+    .support {
+      max-width: min(620px, calc(100vw - 36px));
+      margin: 24px auto 0;
+      text-align: center;
+      line-height: 1.6;
+    }
+    .support a {
+      display: inline-block;
+      padding: 10px 16px;
+      border: 1px solid #e8d77b;
+      color: #e8d77b;
+      background: #15140c;
+      text-underline-offset: 4px;
+    }
+    .support a:hover, .support a:focus-visible {
+      color: #020205;
+      background: #e8d77b;
+      outline: 2px solid #9efbf4;
+      outline-offset: 4px;
+    }
+    .support p { margin: 8px 0 0; color: #b6c7c5; font-size: 13px; }
     .title {
       width: min(720px, calc(100vw - 36px));
       text-align: center;
@@ -176,6 +200,7 @@
   </div>
   <div id="alert"></div>
   <div id="overlay">
+    <div class="menu">
     <div class="title">
       <h1>POLYGON RAID 88</h1>
       <p>LOW POLYGON RAIL SHOOTER</p>
@@ -186,6 +211,11 @@
         <button type="button" data-stage="2">3 BASE TUNNEL</button>
       </div>
       <p class="key">PRESS ENTER</p>
+    </div>
+    <aside class="support" aria-label="開発を応援">
+      <a href="https://buymeacoffee.com/kgninja" target="_blank" rel="noopener noreferrer">開発を応援 / Support KG ↗</a>
+      <p>全3ステージを無料でプレイできます。支援は任意です。<br />支援先のページが新しいタブで開きます。</p>
+    </aside>
     </div>
   </div>
 
@@ -2611,6 +2641,7 @@
     }
 
     window.addEventListener("keydown", (ev) => {
+      if (state.mode !== "play" && ev.target instanceof Element && ev.target.closest("a, button")) return;
       const key = ev.key.toLowerCase();
       if (["arrowup", "arrowdown", "arrowleft", "arrowright", " ", "w", "a", "s", "d", "enter", "1", "2", "3"].includes(key)) ev.preventDefault();
       if (key === "enter" && state.mode !== "play") startGame();
