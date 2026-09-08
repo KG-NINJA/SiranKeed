@@ -8,9 +8,10 @@ Three.js single-file polygon rail shooter inspired by late-1980s low-poly arcade
 
 - [ブラウザーで無料プレイ](https://kg-ninja.github.io/SiranKeed/)
 - [CraftNovaのゲームページ](https://craftnovagame.com/game/28)
+- [KGの開発を任意で応援する — Ko-fi](https://ko-fi.com/kg_ninja)
 - [KGの開発を任意で応援する — Buy Me a Coffee](https://buymeacoffee.com/kgninja)
 
-支援はゲームの購入・機能のアンロックではありません。支援しなくても全ステージをプレイできます。支援先の支払方法や受付状態はリンク先で確認してください。
+支援は任意で、ゲームの購入・機能のアンロック・限定特典などの対価はありません。支援しなくても全ステージをプレイできます。支援先の支払方法や受付状態はリンク先で確認してください。
 
 ## Run
 
