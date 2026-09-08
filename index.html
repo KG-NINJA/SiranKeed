@@ -106,6 +106,7 @@
     }
     .support a {
       display: inline-block;
+      margin: 4px;
       padding: 10px 16px;
       border: 1px solid #e8d77b;
       color: #e8d77b;
@@ -213,8 +214,9 @@
       <p class="key">PRESS ENTER</p>
     </div>
     <aside class="support" aria-label="開発を応援">
-      <a href="https://buymeacoffee.com/kgninja" target="_blank" rel="noopener noreferrer">開発を応援 / Support KG ↗</a>
-      <p>全3ステージを無料でプレイできます。支援は任意です。<br />支援先のページが新しいタブで開きます。</p>
+      <a href="https://ko-fi.com/kg_ninja" target="_blank" rel="noopener noreferrer">Ko-fiで開発を応援 ↗</a>
+      <a href="https://buymeacoffee.com/kgninja" target="_blank" rel="noopener noreferrer">Buy Me a Coffeeで開発を応援 ↗</a>
+      <p>全3ステージを無料でプレイできます。支援は任意で、対価や限定特典はありません。<br />支援先のページが新しいタブで開きます。支払方法・受付状態はリンク先でご確認ください。</p>
     </aside>
     </div>
   </div>
@@ -1539,7 +1541,7 @@
       hud.overlay.classList.remove("hidden");
       const scoreText = String(state.score).padStart(6, "0");
       const shareUrl = "https://twitter.com/intent/tweet?url=" + encodeURIComponent("https://kg-ninja.github.io/SiranKeed/") + "&text=" + encodeURIComponent("I escaped the polygon fortress in POLYGON RAID 88. SCORE " + scoreText + " #KGNINJA");
-      hud.overlay.querySelector(".title").innerHTML = "<h1>MISSION COMPLETE</h1><p>THE RAID FLEET RETURNS THROUGH THE STARS.</p><p>SCORE " + scoreText + "</p><p><a href='" + shareUrl + "' target='_blank' rel='noopener'>Share your score on X</a></p><p><a href='https://buymeacoffee.com/kgninja' target='_blank' rel='noopener'>If you enjoyed this game, please support development on Buy Me a Coffee.</a></p><div class='stage-select' aria-label='Stage select'><button type='button' data-stage='0'>1 SPACE FLEET</button><button type='button' data-stage='1'>2 ASTEROID BELT</button><button type='button' data-stage='2'>3 BASE TUNNEL</button></div><p class='key'>PRESS ENTER TO RESTART</p>";
+      hud.overlay.querySelector(".title").innerHTML = "<h1>MISSION COMPLETE</h1><p>THE RAID FLEET RETURNS THROUGH THE STARS.</p><p>SCORE " + scoreText + "</p><p><a href='" + shareUrl + "' target='_blank' rel='noopener'>Share your score on X</a></p><p>Optional support: <a href='https://ko-fi.com/kg_ninja' target='_blank' rel='noopener noreferrer'>Ko-fi</a> / <a href='https://buymeacoffee.com/kgninja' target='_blank' rel='noopener noreferrer'>Buy Me a Coffee</a>. No purchase or exclusive benefits.</p><div class='stage-select' aria-label='Stage select'><button type='button' data-stage='0'>1 SPACE FLEET</button><button type='button' data-stage='1'>2 ASTEROID BELT</button><button type='button' data-stage='2'>3 BASE TUNNEL</button></div><p class='key'>PRESS ENTER TO RESTART</p>";
       bindStageButtons();
       for (let i = 0; i < 36; i++) spawnExplosion((Math.random() - 0.5) * 8, -3 + Math.random() * 5, -34 - Math.random() * 12, 2, 0xe8d77b, 1.2);
       tone(880, 0.3, "triangle", 0.06);
@@ -2374,7 +2376,7 @@
             hud.overlay.classList.remove("hidden");
             const scoreText = String(state.score).padStart(6, "0");
             const shareUrl = "https://twitter.com/intent/tweet?url=" + encodeURIComponent("https://kg-ninja.github.io/SiranKeed/") + "&text=" + encodeURIComponent("I escaped the dying planet in POLYGON RAID 88. SCORE " + scoreText + " #KGNINJA");
-            hud.overlay.querySelector(".title").innerHTML = "<h1>MISSION COMPLETE</h1><p>ESCAPED THE DYING PLANET.</p><p>SCORE " + scoreText + "</p><p><a href='" + shareUrl + "' target='_blank' rel='noopener'>Share your score on X</a></p><p><a href='https://buymeacoffee.com/kgninja' target='_blank' rel='noopener'>If you enjoyed this game, please support development on Buy Me a Coffee.</a></p><div class='stage-select' aria-label='Stage select'><button type='button' data-stage='0'>1 SPACE FLEET</button><button type='button' data-stage='1'>2 ASTEROID BELT</button><button type='button' data-stage='2'>3 BASE TUNNEL</button></div><p class='key'>PRESS ENTER TO RESTART</p>";
+            hud.overlay.querySelector(".title").innerHTML = "<h1>MISSION COMPLETE</h1><p>ESCAPED THE DYING PLANET.</p><p>SCORE " + scoreText + "</p><p><a href='" + shareUrl + "' target='_blank' rel='noopener'>Share your score on X</a></p><p>Optional support: <a href='https://ko-fi.com/kg_ninja' target='_blank' rel='noopener noreferrer'>Ko-fi</a> / <a href='https://buymeacoffee.com/kgninja' target='_blank' rel='noopener noreferrer'>Buy Me a Coffee</a>. No purchase or exclusive benefits.</p><div class='stage-select' aria-label='Stage select'><button type='button' data-stage='0'>1 SPACE FLEET</button><button type='button' data-stage='1'>2 ASTEROID BELT</button><button type='button' data-stage='2'>3 BASE TUNNEL</button></div><p class='key'>PRESS ENTER TO RESTART</p>";
             bindStageButtons();
             hud.stageName.textContent = "MISSION COMPLETE";
             hud.boss.textContent = "BOSS DOWN";
