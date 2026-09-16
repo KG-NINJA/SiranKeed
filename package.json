@@ -1,0 +1,10 @@
+{
+  "name": "polygon-raid-88",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "three": "0.161.0"
+  }
+}

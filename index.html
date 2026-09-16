@@ -1282,15 +1282,28 @@
       muzzle.rotation.x = Math.PI / 2;
       group.add(beam, core, muzzle);
       group.position.set(boss.x, boss.y, boss.z + 1.8);
-      const dx = targetX - boss.x;
-      const dy = targetY - boss.y;
-      group.rotation.y = -dx * 0.035;
-      group.rotation.x = dy * 0.035;
+      group.lookAt(targetX, targetY, state.player?.z ?? 4.2);
       scene.add(group);
-      effects.push({ type: "bossHeavyLaser", mesh: group, age: 0, ttl: 1.15, x: boss.x, y: boss.y, z: boss.z, targetX, targetY, hitDone: false });
+      effects.push({ type: "bossHeavyLaser", mesh: group, beam, age: 0, ttl: 1.15, hitDone: false });
       announce("HEAVY LASER FIRE");
       noise(0.16, 0.09);
       tone(66, 0.5, "sawtooth", 0.08);
+    }
+
+    function bossHeavyLaserHitsPlayer(effect, player) {
+      // Use the rendered beam's axis, taper and pulse, with the usual player radius.
+      const beam = effect.beam;
+      effect.mesh.updateMatrixWorld(true);
+      const { height, radiusTop, radiusBottom } = beam.geometry.parameters;
+      const start = beam.localToWorld(new THREE.Vector3(0, -height / 2, 0));
+      const end = beam.localToWorld(new THREE.Vector3(0, height / 2, 0));
+      const point = new THREE.Vector3(player.x, player.y, player.z);
+      const axis = end.clone().sub(start);
+      const t = THREE.MathUtils.clamp(point.clone().sub(start).dot(axis) / axis.lengthSq(), 0, 1);
+      const closest = start.addScaledVector(axis, t);
+      const beamRadius = THREE.MathUtils.lerp(radiusBottom, radiusTop, t) * effect.mesh.scale.x;
+      const hitRadius = beamRadius + player.radius;
+      return point.distanceToSquared(closest) < hitRadius * hitRadius;
     }
 
     function startBossHeavyLaserCharge(boss) {
@@ -2282,7 +2295,7 @@
           if (!effect.hitDone && effect.age > 0.18) {
             effect.hitDone = true;
             const p = state.player;
-            if (p && Math.abs(p.x - effect.targetX) < 1.45 && Math.abs(p.y - effect.targetY) < 1.2) playerHit();
+            if (p && bossHeavyLaserHitsPlayer(effect, p)) playerHit();
           }
           if (effect.age > effect.ttl) effect.dead = true;
         } else if (effect.type === "bossHeavyCharge") {
