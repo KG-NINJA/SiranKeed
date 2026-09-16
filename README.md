@@ -31,6 +31,13 @@ Keep the terminal open while playing. If port `4177` is in use, choose another p
 
 Requires Python 3 for this local launch method and a desktop browser with WebGL, ES modules, and import-map support. Touch controls, gamepad controls, pause, and saved progress are not implemented.
 
+## Regression tests
+
+With Node.js 18 or later, run `npm ci` and `npm test`. These tests use the same
+Three.js version as the browser game to check the stage 1 heavy laser's aim,
+collision geometry, damage timing and invulnerability. No build step is needed
+to play or deploy the game.
+
 ## Controls
 
 - `Enter`: start / restart
