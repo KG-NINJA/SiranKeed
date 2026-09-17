@@ -62,15 +62,16 @@ No aiming policy, auto-dodge, pause or invulnerability is added. Invalid actions
 blur, hidden tabs, restart, stage transitions and terminal states release input.
 The release button cancels immediately. Physical keyboard input still works.
 
-Expand **Screen observation JSON** for a timestamped, 10 Hz DOM observation of
-rendered mesh bounding boxes in canvas CSS pixels, plus the existing HUD. This is
-geometry-based screen telemetry, **not Jev image recognition**. Off-frustum and
-hidden objects are omitted; occlusion by other objects/UI is not resolved. The
-panel does not disclose world positions, collision radii, future spawns or hidden
-enemy state. Stable object IDs allow a consumer to compare consecutive frames.
-It contains no API key, network request or TypeSafe client. An external controller
+Expand **Structured game state JSON** for a timestamped, 10 Hz current-state
+observation modeled on the TypeSafe Doom demo. It contains typed game state rather
+than screenshot recognition: player and target world positions, current velocity,
+collision radius, lives/shield, current physical projectiles and solid bodies,
+active heavy-laser geometry, laser-charge telegraphs, stage/HUD state, and the
+finite action space. Visual-only effects, future spawns, and historical frames are
+not included. Stable object IDs identify objects within a running session. It
+contains no API key, network request or TypeSafe client. An external controller
 must supply fresh observations to Jev and mechanically apply its returned actions.
-Ordinary URLs do not display or calculate screen telemetry.
+Ordinary URLs do not display or calculate structured telemetry.
 
 ## Stages
 

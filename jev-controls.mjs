@@ -31,8 +31,9 @@ export function createTimedInput() {
   };
 }
 
-// Only geometry currently intersecting the camera frustum is reported.
-// No HP, timers, collision radii, future spawns or world coordinates are exposed.
+// Legacy screen projection helper. The Jev path now uses structured game state;
+// this stays exported for regression tests and for consumers that need a visual
+// projection outside the Jev adapter.
 export function screenObject(THREE, mesh, camera, width, height) {
   if (!mesh) return null;
   for (let p = mesh; p; p = p.parent) if (!p.visible) return null;
@@ -59,13 +60,13 @@ export function mountJevPanel(input, isPlaying) {
   const panel = document.createElement('section');
   panel.id = 'jev-panel';
   panel.setAttribute('aria-label', 'Jev controls');
-  panel.innerHTML = `<strong>Jev input / screen telemetry v1</strong>
-    <p>通常速度・当たり判定。自動判断なし。入力は最大3秒で解除。</p>
+  panel.innerHTML = `<strong>Jev input / structured game state v2</strong>
+    <p>DOOMデモ型: 現在フレームの構造化状態を渡し、Jevの有限操作を最大3秒だけ実行。</p>
     <label>Jev action JSON<textarea aria-label="Jev action JSON" rows="3">{"movement":"stay","fire":false,"duration_ms":1000,"move_ms":0}</textarea></label>
     <button type="button" id="jev-apply">Apply Jev action</button>
     <button type="button" id="jev-stop">Release Jev input</button>
     <output id="jev-result" aria-live="polite">Ready</output>
-    <details><summary>Screen observation JSON</summary><pre id="jev-observation"></pre></details>`;
+    <details><summary>Structured game state JSON</summary><pre id="jev-observation"></pre></details>`;
   document.body.appendChild(panel);
   const result = panel.querySelector('output');
   panel.querySelector('#jev-apply').onclick = () => {
