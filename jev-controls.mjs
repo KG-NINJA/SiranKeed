@@ -8,8 +8,25 @@ const directions = {
 };
 
 const safetyDirections = ['left', 'right', 'up', 'down'];
-const safetyMoveMs = 520;
-const safetyDurationMs = 620;
+// Make the laser dodge a large, continuous displacement.  The movement and
+// lease durations match so the safety layer never releases the movement key
+// while the charge/beam window is still active.
+const safetyMoveMs = 760;
+const safetyDurationMs = 900;
+
+function directionIsSafe(observation, direction) {
+  const player = observation?.player;
+  const bounds = player?.bounds;
+  if (!player?.position || !bounds || !safetyDirections.includes(direction)) return false;
+  const radius = Number(player.collision_radius) || 0.72;
+  const margin = Math.max(0.9, radius * 1.8);
+  const x = Number(player.position.x) || 0;
+  const y = Number(player.position.y) || 0;
+  if (direction === 'left') return x > Number(bounds.x_min) + margin;
+  if (direction === 'right') return x < Number(bounds.x_max) - margin;
+  if (direction === 'up') return y < Number(bounds.y_max) - margin;
+  return y > Number(bounds.y_min) + margin;
+}
 
 function beamClearanceSquared(beam, point) {
   const start = beam?.axis?.start;
@@ -111,7 +128,17 @@ export function createTimedInput() {
     observe(observation, now) {
       const direction = safetyDirection(observation, previousSafetyDirection);
       const safetyActive = safetyOverride && now - safetyOverride.started < safetyOverride.duration_ms;
-      if (direction && !safetyActive) {
+      const activeBeam = (observation.hazards || []).some(item =>
+        item?.kind === 'persistent_damage_beam' && item.collision === true);
+      const movementComplete = safetyOverride &&
+        now - safetyOverride.started >= safetyMoveMs;
+      const currentDirectionUnsafe = safetyOverride && direction &&
+        !directionIsSafe(observation, safetyOverride.movement);
+      // Refresh at the end of each large movement, or immediately when the
+      // current direction reaches a screen edge.  Replacing the lease at the
+      // same timestamp keeps the movement key held with no inter-frame stop.
+      const needsContinuousRefresh = activeBeam && (movementComplete || currentDirectionUnsafe);
+      if (direction && (!safetyActive || needsContinuousRefresh)) {
         previousSafetyDirection = direction;
         safetyOverride = {
           movement: direction,

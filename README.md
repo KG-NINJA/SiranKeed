@@ -59,10 +59,13 @@ Directions: `stay`, `left`, `right`, `up`, `down`, `up_left`, `up_right`,
 movement 0–total. The existing player update handles movement and shooting with
 unchanged speed, cooldown, limits, damage, enemy behavior and game clock.
 During play, a typed `boss_heavy_laser_charge` telegraph or active
-`persistent_damage_beam` can briefly take a deterministic 620 ms safety override
-so a slow Jev decision cannot wait through the 0.75 s charge window. The guard
-only uses the current structured player bounds and beam axis; it does not infer
-unseen threats or choose ordinary positioning. Invalid actions, blur, hidden
+`persistent_damage_beam` can take a deterministic 900 ms safety override with
+760 ms of continuous movement, so a slow Jev decision cannot wait through the
+0.75 s charge window or stop at laser launch. The guard refreshes the lease at
+the end of each large displacement and immediately at a screen edge, keeping
+movement continuous while the beam is active. It only uses the current
+structured player bounds and beam axis; it does not infer unseen threats or
+choose ordinary positioning. Invalid actions, blur, hidden
 tabs, restart, stage transitions and terminal states release input. The release
 button cancels immediately. Physical keyboard input still works.
 
