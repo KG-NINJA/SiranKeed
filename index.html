@@ -174,6 +174,14 @@
       .stage-select { grid-template-columns: 1fr; }
     }
     @keyframes blink { 50% { opacity: 0.25; } }
+    #jev-panel { position: fixed; right: 8px; bottom: 8px; z-index: 6; width: 310px;
+      max-width: 45vw; padding: 8px; background: #080b12ed; border: 1px solid #7df5ee;
+      font-size: 11px; }
+    #jev-panel p { margin: 4px 0; }
+    #jev-panel textarea { width: 98%; font-size: 11px; }
+    #jev-panel button { margin: 4px 2px; }
+    #jev-panel output { display: block; overflow-wrap: anywhere; }
+    #jev-panel pre { max-height: 110px; overflow: auto; white-space: pre-wrap; }
   </style>
   <script type="importmap">
     {
@@ -223,6 +231,7 @@
 
   <script type="module">
     import * as THREE from "three";
+    import { createTimedInput, screenObject, mountJevPanel } from './jev-controls.mjs';
 
     const root = document.getElementById("game");
     const hud = {
@@ -301,6 +310,44 @@
     const effects = [];
     const formations = new Map();
     const bonusPopups = [];
+    const jevInput = createTimedInput();
+    const jevEnabled = new URLSearchParams(location.search).get('jev') === '1';
+    const publishJev = jevEnabled ? mountJevPanel(jevInput, () => state.mode === 'play') : null;
+    let lastJevObservation = 0;
+    let jevSequence = 0;
+    const jevIds = new WeakMap();
+    let nextJevId = 1;
+
+    function inputHeld(key) {
+      return keys.has(key) || (jevEnabled && jevInput.has(key, performance.now()));
+    }
+
+    function publishJevObservation(now) {
+      if (!publishJev || now - lastJevObservation < 100) return;
+      lastJevObservation = now;
+      const rect = renderer.domElement.getBoundingClientRect();
+      const objects = [];
+      const add = (entity, kind) => {
+        if (!entity || entity.dead) return;
+        const bounds = screenObject(THREE, entity.mesh, camera, rect.width, rect.height);
+        if (!bounds) return;
+        if (!jevIds.has(entity)) jevIds.set(entity, nextJevId++);
+        objects.push({ id: jevIds.get(entity), kind, ...bounds });
+      };
+      add(state.player, 'player');
+      entities.forEach(e => add(e, e.type));
+      enemyBullets.forEach(e => add(e, 'enemy_projectile'));
+      bullets.forEach(e => add(e, 'player_shot'));
+      effects.filter(e => ['bossHeavyLaser', 'bossHeavyCharge'].includes(e.type)).forEach(e => add(e, e.type));
+      publishJev({ version: 1, seq: ++jevSequence, captured_at: new Date().toISOString(),
+        source: 'rendered mesh screen bounds, not screenshot recognition; occlusion not resolved',
+        coordinates: 'CSS pixels, canvas top-left; x right, y down',
+        viewport: { width: rect.width, height: rect.height },
+        hud: { stage: hud.stageName.textContent, lives: hud.lives.textContent,
+          power: hud.power.textContent, boss: hud.boss.textContent, time: hud.time.textContent,
+          score: hud.score.textContent, alert: hud.alert.textContent },
+        input: jevInput.snapshot(now), objects });
+    }
 
     function createWireMesh(geometry, fillColor, edgeColor, opacity = 0.38) {
       const group = new THREE.Group();
@@ -1516,6 +1563,7 @@
     }
 
     function startGame(stageIndex = 0) {
+      jevInput.cancel();
       ensureAudio();
       state.mode = "play";
       state.stageIndex = stageIndex;
@@ -1535,6 +1583,7 @@
     }
 
     function nextStage() {
+      jevInput.cancel();
       state.stageIndex += 1;
       if (state.stageIndex >= STAGES.length) {
         ending();
@@ -1640,10 +1689,10 @@
       const speed = 9.2 * state.speedMult;
       let dx = 0;
       let dy = 0;
-      if (keys.has("arrowleft") || keys.has("a")) dx -= 1;
-      if (keys.has("arrowright") || keys.has("d")) dx += 1;
-      if (keys.has("arrowup") || keys.has("w")) dy += 1;
-      if (keys.has("arrowdown") || keys.has("s")) dy -= 1;
+      if (inputHeld("arrowleft") || inputHeld("a")) dx -= 1;
+      if (inputHeld("arrowright") || inputHeld("d")) dx += 1;
+      if (inputHeld("arrowup") || inputHeld("w")) dy += 1;
+      if (inputHeld("arrowdown") || inputHeld("s")) dy -= 1;
       if (dx && dy) { dx *= 0.707; dy *= 0.707; }
       const overBattleship = state.stageIndex === 1 && state.bossSpawned && state.boss && state.boss.stage2Boss;
       p.x = THREE.MathUtils.clamp(p.x + dx * speed * dt, overBattleship ? -9.4 : -5.8, overBattleship ? 9.4 : 5.8);
@@ -1651,7 +1700,7 @@
       p.mesh.position.set(p.x, p.y, p.z);
       p.mesh.rotation.z = -dx * 0.35;
       p.mesh.rotation.x = dy * 0.12;
-      if (keys.has(" ")) shoot();
+      if (inputHeld(" ")) shoot();
       state.shotCooldown = Math.max(0, state.shotCooldown - dt);
       state.invuln = Math.max(0, state.invuln - dt);
       p.mesh.visible = state.invuln <= 0 || Math.floor(performance.now() / 80) % 2 === 0;
@@ -2646,6 +2695,8 @@
       state.slowMoTimer = Math.max(0, state.slowMoTimer - dt);
       updateHud();
       renderer.render(scene, camera);
+      if (state.mode !== 'play') jevInput.cancel();
+      publishJevObservation(now);
       requestAnimationFrame(loop);
     }
 
@@ -2656,6 +2707,7 @@
     }
 
     window.addEventListener("keydown", (ev) => {
+      if (ev.target instanceof Element && ev.target.closest('#jev-panel')) return;
       if (state.mode !== "play" && ev.target instanceof Element && ev.target.closest("a, button")) return;
       const key = ev.key.toLowerCase();
       if (["arrowup", "arrowdown", "arrowleft", "arrowright", " ", "w", "a", "s", "d", "enter", "1", "2", "3"].includes(key)) ev.preventDefault();
