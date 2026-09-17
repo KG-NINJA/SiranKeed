@@ -9,6 +9,25 @@ const directions = {
 
 const safetyDirections = ['left', 'right', 'up', 'down'];
 
+function beamClearanceSquared(beam, point) {
+  const start = beam?.axis?.start;
+  const end = beam?.axis?.end;
+  if (!start || !end) return -Infinity;
+  const ax = Number(end.x) - Number(start.x);
+  const ay = Number(end.y) - Number(start.y);
+  const az = Number(end.z) - Number(start.z);
+  const lengthSquared = ax * ax + ay * ay + az * az;
+  if (!Number.isFinite(lengthSquared) || lengthSquared <= 0) return -Infinity;
+  const px = Number(point.x) - Number(start.x);
+  const py = Number(point.y) - Number(start.y);
+  const pz = Number(point.z) - Number(start.z);
+  const t = Math.max(0, Math.min(1, (px * ax + py * ay + pz * az) / lengthSquared));
+  const dx = Number(point.x) - (Number(start.x) + ax * t);
+  const dy = Number(point.y) - (Number(start.y) + ay * t);
+  const dz = Number(point.z) - (Number(start.z) + az * t);
+  return dx * dx + dy * dy + dz * dz;
+}
+
 function safetyDirection(observation, previousDirection) {
   if (!observation || observation.status !== 'act') return null;
   const player = observation.player;
@@ -40,13 +59,27 @@ function safetyDirection(observation, previousDirection) {
   // every 100 ms would cancel displacement just when the beam is about to fire.
   if (telegraph && previousDirection && safe[previousDirection]) return previousDirection;
 
-  // Move perpendicular to an already active beam when its typed axis is clear.
-  if (beam?.axis?.direction) {
-    const axisX = Math.abs(Number(beam.axis.direction.x) || 0);
-    const axisY = Math.abs(Number(beam.axis.direction.y) || 0);
-    const perpendicular = axisX >= axisY ? ['up', 'down'] : ['left', 'right'];
-    const escape = perpendicular.find(direction => safe[direction]);
-    if (escape) return escape;
+  // For an active beam, score the actual typed line after a short movement
+  // rather than guessing from the largest axis component. This remains safe
+  // when the player is already close to a screen edge or the beam is diagonal.
+  if (beam?.axis?.start && beam.axis.end) {
+    const step = 9.2 * 0.28;
+    const point = { x, y, z: Number(player.position.z) || 0 };
+    const edgePreference = y <= Number(bounds.y_min) + margin ? ['up'] :
+      (y >= Number(bounds.y_max) - margin ? ['down'] : []);
+    const candidates = available.map(direction => {
+      const next = { ...point };
+      if (direction === 'left') next.x -= step;
+      if (direction === 'right') next.x += step;
+      if (direction === 'up') next.y += step;
+      if (direction === 'down') next.y -= step;
+      return {
+        direction,
+        clearance: beamClearanceSquared(beam, next),
+        edgeRank: edgePreference.includes(direction) ? 0 : 1
+      };
+    }).sort((a, b) => b.clearance - a.clearance || a.edgeRank - b.edgeRank);
+    if (candidates[0] && Number.isFinite(candidates[0].clearance)) return candidates[0].direction;
   }
 
   // During the charge, choose a lateral escape when possible so the input

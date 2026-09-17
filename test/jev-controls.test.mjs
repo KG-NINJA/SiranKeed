@@ -83,6 +83,45 @@ test('telegraph safety overrides a slow Jev action for an immediate lateral dodg
   assert.equal(input.has('arrowleft', 850), false);
   assert.equal(input.has(' ', 850), true);
 });
+test('active beam safety chooses the candidate farthest from its typed line', () => {
+  const input = createTimedInput();
+  input.submit({ movement: 'stay', fire: true, move_ms: 3000, duration_ms: 3000 }, 0);
+  input.observe({
+    status: 'act',
+    player: {
+      position: { x: 0, y: -3.4, z: 4.2 },
+      collision_radius: 0.72,
+      bounds: { x_min: -5.8, x_max: 5.8, y_min: -3.75, y_max: 3.55 }
+    },
+    telegraphs: [],
+    hazards: [{
+      kind: 'persistent_damage_beam',
+      collision: true,
+      axis: { start: { x: 0, y: -3.4, z: -17 }, end: { x: 0, y: -3.4, z: 23 } }
+    }]
+  }, 100);
+  assert.equal(input.has('arrowup', 150), true);
+  assert.equal(input.has('arrowdown', 150), false);
+  assert.equal(input.snapshot(150).source, 'telegraph-safety');
+});
+test('ordinary projectiles do not activate the laser-only safety override', () => {
+  const input = createTimedInput();
+  input.submit({ movement: 'stay', fire: true, move_ms: 3000, duration_ms: 3000 }, 0);
+  input.observe({
+    status: 'act',
+    player: {
+      position: { x: 0, y: 0, z: 4.2 },
+      collision_radius: 0.72,
+      bounds: { x_min: -5.8, x_max: 5.8, y_min: -3.75, y_max: 3.55 }
+    },
+    telegraphs: [],
+    hazards: [{ kind: 'enemy_projectile', collision: true }]
+  }, 100);
+  assert.equal(input.has('arrowleft', 150), false);
+  assert.equal(input.has('arrowright', 150), false);
+  assert.equal(input.has(' ', 150), true);
+  assert.equal(input.snapshot(150).source, undefined);
+});
 test('timed input uses shipped player speed, diagonal normalization and boundaries', () => {
   const start = html.indexOf('    function updatePlayer(');
   const end = html.indexOf('\n    function ', start + 1);
