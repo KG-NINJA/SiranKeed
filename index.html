@@ -231,7 +231,7 @@
 
   <script type="module">
     import * as THREE from "three";
-    import { createTimedInput, screenObject, mountJevPanel } from './jev-controls.mjs';
+    import { createTimedInput, mountJevPanel } from './jev-controls.mjs';
 
     const root = document.getElementById("game");
     const hud = {
@@ -322,31 +322,199 @@
       return keys.has(key) || (jevEnabled && jevInput.has(key, performance.now()));
     }
 
+    const structuredHazardTypes = new Set([
+      'enemy', 'missile', 'asteroid', 'monolith', 'turret', 'gate', 'baseWall', 'bossPart', 'bossCore'
+    ]);
+
+    function roundStateNumber(value) {
+      return Number.isFinite(value) ? Math.round(value * 1000) / 1000 : 0;
+    }
+
+    function vectorState(x = 0, y = 0, z = 0) {
+      return { x: roundStateNumber(x), y: roundStateNumber(y), z: roundStateNumber(z) };
+    }
+
+    function objectVelocity(entity) {
+      if (!entity) return vectorState();
+      if (entity.path) {
+        const phase = entity.path.t * entity.path.freq + entity.path.phase;
+        return vectorState(
+          Math.cos(phase) * entity.path.freq * entity.path.ampX,
+          -Math.sin(entity.path.t * entity.path.freq * 0.85 + entity.path.phase) * entity.path.freq * 0.85 * entity.path.ampY,
+          entity.vz || 0
+        );
+      }
+      if (entity.stage2Boss) {
+        return vectorState(
+          Math.cos((entity.stage2T || 0) * 0.2) * 0.2 * 0.65,
+          Math.cos((entity.stage2T || 0) * 0.36) * 0.36 * 0.12,
+          entity.vz || 0
+        );
+      }
+      return vectorState(entity.vx || 0, entity.vy || 0, entity.vz || 0);
+    }
+
+    function stateObjectId(value) {
+      if (!jevIds.has(value)) jevIds.set(value, nextJevId++);
+      return jevIds.get(value);
+    }
+
+    function relativePosition(entity, player) {
+      return vectorState((entity?.x || 0) - (player?.x || 0),
+        (entity?.y || 0) - (player?.y || 0), (entity?.z || 0) - (player?.z || 0));
+    }
+
+    function structuredObject(entity, kind, player, extra = {}) {
+      if (!entity || entity.dead) return null;
+      return {
+        id: stateObjectId(entity),
+        kind,
+        position: vectorState(entity.x, entity.y, entity.z),
+        velocity: objectVelocity(entity),
+        collision_radius: roundStateNumber(entity.radius || 0),
+        collision: true,
+        relative_to_player: relativePosition(entity, player),
+        ...(Number.isFinite(entity.hp) ? { hp: roundStateNumber(entity.hp) } : {}),
+        ...(Number.isFinite(entity.maxHp) ? { max_hp: roundStateNumber(entity.maxHp) } : {}),
+        ...extra
+      };
+    }
+
+    function structuredBeam(effect, player) {
+      if (!effect || effect.dead || !effect.beam) return null;
+      const beam = effect.beam;
+      effect.mesh.updateMatrixWorld(true);
+      const { height, radiusTop, radiusBottom } = beam.geometry.parameters;
+      const start = beam.localToWorld(new THREE.Vector3(0, -height / 2, 0));
+      const end = beam.localToWorld(new THREE.Vector3(0, height / 2, 0));
+      const center = start.clone().add(end).multiplyScalar(0.5);
+      const axis = end.clone().sub(start).normalize();
+      const beamState = {
+        id: stateObjectId(effect),
+        kind: 'persistent_damage_beam',
+        phase: 'active',
+        collision: true,
+        position: vectorState(center.x, center.y, center.z),
+        velocity: vectorState(),
+        axis: { start: vectorState(start.x, start.y, start.z), end: vectorState(end.x, end.y, end.z), direction: vectorState(axis.x, axis.y, axis.z) },
+        radius: { start: roundStateNumber(radiusBottom * effect.mesh.scale.x), end: roundStateNumber(radiusTop * effect.mesh.scale.x) },
+        relative_to_player: vectorState(center.x - (player?.x || 0), center.y - (player?.y || 0), center.z - (player?.z || 0)),
+        remaining_s: roundStateNumber(Math.max(0, effect.ttl - effect.age))
+      };
+      return beamState;
+    }
+
+    function structuredJevObservation(now) {
+      const stage = STAGES[state.stageIndex] || STAGES[0];
+      const player = state.player;
+      const overBattleship = state.stageIndex === 1 && state.bossSpawned && state.boss && state.boss.stage2Boss;
+      const bounds = {
+        x_min: overBattleship ? -9.4 : -5.8,
+        x_max: overBattleship ? 9.4 : 5.8,
+        y_min: overBattleship ? -2.6 : -3.75,
+        y_max: overBattleship ? 3.25 : 3.55,
+        z: roundStateNumber(player?.z || 4.2)
+      };
+      const playerState = structuredObject(player, 'player', player, {
+        collision_radius: roundStateNumber(player?.radius || 0.72),
+        collision: true,
+        vulnerable: state.invuln <= 0,
+        invulnerable_for_s: roundStateNumber(Math.max(0, state.invuln)),
+        lives: Math.max(0, state.lives),
+        shield: Math.max(0, state.shield),
+        shot_level: state.shotLevel,
+        speed_multiplier: roundStateNumber(state.speedMult),
+        bounds
+      });
+      const targets = [];
+      const hazards = [];
+      for (const entity of entities) {
+        if (entity.dead) continue;
+        if (entity.type === 'boss') {
+          const target = structuredObject(entity, 'boss', player, {
+            targetable: !entity.dying && (!Number.isFinite(entity.introTimer) || entity.introTimer <= 0),
+            phase: entity.dying ? 'dying' : (entity.introTimer > 0 ? (entity.introPhase || 'intro') : 'active'),
+            parts_destroyed: Number.isFinite(entity.partsDestroyed) ? entity.partsDestroyed : undefined,
+            parts_total: Number.isFinite(entity.partsTotal) ? entity.partsTotal : undefined,
+            core_exposed: entity.coreExposed === true
+          });
+          if (target) targets.push(target);
+        } else if (structuredHazardTypes.has(entity.type)) {
+          const hazard = structuredObject(entity, entity.type, player, { collision_kind: 'solid_body' });
+          if (hazard) hazards.push(hazard);
+          if (entity.type === 'enemy' || entity.type === 'missile') {
+            const target = structuredObject(entity, entity.type, player, { targetable: true });
+            if (target) targets.push(target);
+          }
+        }
+      }
+      for (const projectile of enemyBullets) {
+        const hazard = structuredObject(projectile, 'enemy_projectile', player, {
+          collision_kind: 'projectile',
+          projectile_type: projectile.type,
+          gravity: roundStateNumber(projectile.gravity || 0)
+        });
+        if (hazard) hazards.push(hazard);
+      }
+      const telegraphs = [];
+      for (const effect of effects) {
+        if (effect.type === 'bossHeavyCharge' && !effect.dead) {
+          const telegraph = structuredObject(effect.boss, 'boss_heavy_laser_charge', player, {
+            collision: false,
+            phase: 'telegraph',
+            remaining_s: roundStateNumber(Math.max(0, effect.ttl - effect.age))
+          });
+          if (telegraph) telegraphs.push(telegraph);
+        } else if (effect.type === 'bossHeavyLaser') {
+          const beam = structuredBeam(effect, player);
+          if (beam) hazards.push(beam);
+        }
+      }
+      return {
+        version: 2,
+        seq: ++jevSequence,
+        captured_at: new Date().toISOString(),
+        source: 'current game state adapter; no screenshot recognition or historical frame',
+        status: state.mode === 'title' ? 'start' : (state.mode === 'gameover' ? 'failed' : 'act'),
+        game: {
+          mode: state.mode,
+          stage_state: state.mode === 'play' ? (state.cutscene ? 'cutscene' : 'play') : (state.mode === 'title' ? 'standby' : state.mode),
+          stage_id: stage.id,
+          stage_name: stage.name,
+          stage_elapsed_s: roundStateNumber(state.stageTime),
+          stage_remaining_s: roundStateNumber(Math.max(0, stage.duration - state.stageTime)),
+          cutscene: state.cutscene,
+          game_over: state.mode === 'gameover'
+        },
+        hud: {
+          score: state.score,
+          lives: Math.max(0, state.lives),
+          shield: Math.max(0, state.shield),
+          power_level: state.shotLevel,
+          boss_hp: state.boss && Number.isFinite(state.boss.hp) ? roundStateNumber(state.boss.hp) : null,
+          boss_max_hp: state.boss && Number.isFinite(state.boss.maxHp) ? roundStateNumber(state.boss.maxHp) : null,
+          alert: hud.alert.textContent || ''
+        },
+        player: playerState,
+        targets,
+        hazards,
+        telegraphs,
+        action_space: {
+          movement: ['stay', 'left', 'right', 'up', 'down', 'up_left', 'up_right', 'down_left', 'down_right'],
+          fire: [true, false],
+          duration_ms: { min: 50, max: 3000 },
+          move_ms: { min: 0, max: 3000 },
+          rule: 'choose one finite action from this current state; input is released on expiry'
+        },
+        input: jevInput.snapshot(now),
+        counts: { targets: targets.length, hazards: hazards.length, telegraphs: telegraphs.length }
+      };
+    }
+
     function publishJevObservation(now) {
       if (!publishJev || now - lastJevObservation < 100) return;
       lastJevObservation = now;
-      const rect = renderer.domElement.getBoundingClientRect();
-      const objects = [];
-      const add = (entity, kind) => {
-        if (!entity || entity.dead) return;
-        const bounds = screenObject(THREE, entity.mesh, camera, rect.width, rect.height);
-        if (!bounds) return;
-        if (!jevIds.has(entity)) jevIds.set(entity, nextJevId++);
-        objects.push({ id: jevIds.get(entity), kind, ...bounds });
-      };
-      add(state.player, 'player');
-      entities.forEach(e => add(e, e.type));
-      enemyBullets.forEach(e => add(e, 'enemy_projectile'));
-      bullets.forEach(e => add(e, 'player_shot'));
-      effects.filter(e => ['bossHeavyLaser', 'bossHeavyCharge'].includes(e.type)).forEach(e => add(e, e.type));
-      publishJev({ version: 1, seq: ++jevSequence, captured_at: new Date().toISOString(),
-        source: 'rendered mesh screen bounds, not screenshot recognition; occlusion not resolved',
-        coordinates: 'CSS pixels, canvas top-left; x right, y down',
-        viewport: { width: rect.width, height: rect.height },
-        hud: { stage: hud.stageName.textContent, lives: hud.lives.textContent,
-          power: hud.power.textContent, boss: hud.boss.textContent, time: hud.time.textContent,
-          score: hud.score.textContent, alert: hud.alert.textContent },
-        input: jevInput.snapshot(now), objects });
+      publishJev(structuredJevObservation(now));
     }
 
     function createWireMesh(geometry, fillColor, edgeColor, opacity = 0.38) {
@@ -408,7 +576,7 @@
       tail.position.z = 0.9;
       ship.add(tail);
       scene.add(ship);
-      state.player = { type: "player", mesh: ship, x: 0, y: -2.0, z: 4.2, radius: 0.72, hp: 1 };
+      state.player = { type: "player", mesh: ship, x: 0, y: -2.0, z: 4.2, radius: 0.72, hp: 1, vx: 0, vy: 0, vz: 0 };
       ship.position.set(state.player.x, state.player.y, state.player.z);
     }
 
@@ -1694,6 +1862,9 @@
       if (inputHeld("arrowup") || inputHeld("w")) dy += 1;
       if (inputHeld("arrowdown") || inputHeld("s")) dy -= 1;
       if (dx && dy) { dx *= 0.707; dy *= 0.707; }
+      p.vx = dx * speed;
+      p.vy = dy * speed;
+      p.vz = 0;
       const overBattleship = state.stageIndex === 1 && state.bossSpawned && state.boss && state.boss.stage2Boss;
       p.x = THREE.MathUtils.clamp(p.x + dx * speed * dt, overBattleship ? -9.4 : -5.8, overBattleship ? 9.4 : 5.8);
       p.y = THREE.MathUtils.clamp(p.y + dy * speed * dt, overBattleship ? -2.6 : -3.75, overBattleship ? 3.25 : 3.55);
