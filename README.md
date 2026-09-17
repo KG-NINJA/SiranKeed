@@ -51,13 +51,16 @@ Open `?jev=1` to enable a visible, bounded input panel. Paste a Jev-selected act
 and click **Apply Jev action**, for example:
 
 ```json
-{"movement":"right","fire":true,"duration_ms":1000,"move_ms":200}
+{"movement":"right","fire":true,"duration_ms":1000,"move_ms":200,"observation_seq":42}
 ```
 
 Directions: `stay`, `left`, `right`, `up`, `down`, `up_left`, `up_right`,
 `down_left`, `down_right`. Durations are integer milliseconds: total 50–3000,
 movement 0–total. The existing player update handles movement and shooting with
 unchanged speed, cooldown, limits, damage, enemy behavior and game clock.
+`observation_seq` is optional. Supplying the `seq` from the state used for the
+decision lets the panel measure observation-to-action delay instead of treating
+the newest visible state as the model input.
 During play, a typed `boss_heavy_laser_charge` telegraph or active
 `persistent_damage_beam` can take a deterministic 900 ms safety override with
 760 ms of continuous movement, so a slow Jev decision cannot wait through the
@@ -76,7 +79,11 @@ collision radius, lives/shield, current physical projectiles and solid bodies,
 active heavy-laser geometry, laser-charge telegraphs, stage/HUD state, and the
 finite action space. Visual-only effects, future spawns, and historical frames are
 not included. Stable object IDs identify objects within a running session. It
-contains no API key, network request or TypeSafe client. An external controller
+also reports `reaction_timing`, projected contact deadlines for physical
+hazards, and `recent_control` feedback with actual displacement, edge blocking,
+movement progress ratio, resource loss, and boss damage. These are measured facts; Jev still selects the
+ordinary controller action.
+It contains no API key, network request or TypeSafe client. An external controller
 must supply fresh observations to Jev and mechanically apply its returned actions.
 Ordinary URLs do not display or calculate structured telemetry.
 

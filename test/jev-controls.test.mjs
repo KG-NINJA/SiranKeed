@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
-import { createTimedInput, screenObject } from '../jev-controls.mjs';
+import { createTimedInput, projectedContact, screenObject } from '../jev-controls.mjs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 test('browser module parses', () => {
@@ -25,7 +25,8 @@ test('bad requests fail closed and replacements do not accumulate', () => {
   const input = createTimedInput();
   const valid = { movement: 'left', fire: true, move_ms: 100, duration_ms: 1000 };
   for (const patch of [{ duration_ms: 3001 }, { duration_ms: -1 }, { move_ms: 1001 },
-    { fire: 'true' }, { movement: '__proto__' }, { move_ms: NaN }, { duration_ms: Infinity }]) {
+    { fire: 'true' }, { movement: '__proto__' }, { move_ms: NaN }, { duration_ms: Infinity },
+    { observation_seq: -1 }, { observation_seq: 1.5 }]) {
     input.submit(valid, 0);
     assert.throws(() => input.submit({ ...valid, ...patch }, 1));
     assert.equal(input.has(' ', 2), false);
@@ -35,6 +36,71 @@ test('bad requests fail closed and replacements do not accumulate', () => {
   assert.equal(input.has('arrowleft', 20), false);
   assert.equal(input.has('arrowright', 20), true);
   assert.equal(input.has(' ', 20), false);
+});
+
+test('projected contact reports collision deadlines and safe misses', () => {
+  const hit = projectedContact({ x: 0, y: 0, z: -10 }, { x: 0, y: 0, z: 5 }, 1, 3);
+  assert.ok(Math.abs(hit.time_to_contact_s - 1.8) < 1e-9);
+  assert.equal(hit.closest_approach_s, 2);
+  assert.equal(hit.closest_clearance, -1);
+  assert.equal(hit.closing, true);
+  const miss = projectedContact({ x: 3, y: 0, z: -10 }, { x: 0, y: 0, z: 5 }, 1, 3);
+  assert.equal(miss.time_to_contact_s, null);
+  assert.equal(miss.closest_approach_s, 2);
+  assert.equal(miss.closest_clearance, 2);
+});
+
+test('reaction timing and recent control report measured action outcomes', () => {
+  const input = createTimedInput();
+  const observation = (x, bossHp, lives, shield) => ({
+    status: 'act', seq: 20,
+    hud: { boss_hp: bossHp, lives, shield },
+    player: {
+      position: { x, y: 0, z: 4.2 }, speed_multiplier: 1,
+      bounds: { x_min: -5.8, x_max: 5.8, y_min: -3.75, y_max: 3.55 }
+    },
+    telegraphs: [], hazards: []
+  });
+  input.submit({ movement: 'right', fire: true, move_ms: 1000, duration_ms: 1000,
+    observation_seq: 7 }, 100, { observation_to_action_ms: 240 });
+  input.observe(observation(0, 140, 3, 1), 100);
+  input.observe(observation(1.84, 138, 2, 0), 300);
+  assert.deepEqual(input.timing(300), {
+    decision_observation_seq: 7,
+    observation_to_action_ms: 240,
+    action_age_ms: 200,
+    action_remaining_ms: 800
+  });
+  const current = input.feedback(300).current;
+  assert.equal(current.actual_displacement.x, 1.84);
+  assert.equal(current.commanded_progress, 1.84);
+  assert.equal(current.expected_displacement, 1.84);
+  assert.equal(current.progress_ratio, 1);
+  assert.equal(current.movement_effective, true);
+  assert.equal(current.lives_lost, 1);
+  assert.equal(current.shield_lost, 1);
+  assert.equal(current.boss_damage, 2);
+  input.submit({ movement: 'stay', fire: true, move_ms: 0, duration_ms: 500,
+    observation_seq: 20 }, 350, { observation_to_action_ms: 80 });
+  input.observe(observation(1.84, 138, 2, 0), 350);
+  assert.equal(input.feedback(350).previous.completed, true);
+  assert.equal(input.feedback(350).previous.movement, 'right');
+});
+
+test('recent control does not attribute a safety override interval to resumed movement', () => {
+  const input = createTimedInput();
+  const player = { position: { x: 0, y: 0, z: 4.2 }, speed_multiplier: 1,
+    collision_radius: 0.72, bounds: { x_min: -5.8, x_max: 5.8, y_min: -3.75, y_max: 3.55 } };
+  input.submit({ movement: 'right', fire: true, move_ms: 1000, duration_ms: 3000 }, 0);
+  input.observe({ status: 'act', seq: 1, hud: { lives: 3, shield: 1, boss_hp: 140 },
+    player, telegraphs: [], hazards: [] }, 0);
+  input.observe({ status: 'act', seq: 2, hud: { lives: 3, shield: 1, boss_hp: 140 },
+    player, telegraphs: [{ kind: 'boss_heavy_laser_charge', phase: 'telegraph', remaining_s: 0.5 }],
+    hazards: [] }, 100);
+  input.observe({ status: 'act', seq: 3, hud: { lives: 3, shield: 1, boss_hp: 140 },
+    player, telegraphs: [], hazards: [] }, 1100);
+  assert.equal(input.feedback(1100).current.source, 'jev');
+  assert.equal(input.feedback(1100).current.expected_displacement, 0);
 });
 test('telegraph safety overrides a slow Jev action for an immediate lateral dodge', () => {
   const input = createTimedInput();
