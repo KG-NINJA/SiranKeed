@@ -36,6 +36,53 @@ test('bad requests fail closed and replacements do not accumulate', () => {
   assert.equal(input.has('arrowright', 20), true);
   assert.equal(input.has(' ', 20), false);
 });
+test('telegraph safety overrides a slow Jev action for an immediate lateral dodge', () => {
+  const input = createTimedInput();
+  input.submit({ movement: 'stay', fire: true, move_ms: 3000, duration_ms: 3000 }, 0);
+  input.observe({
+    status: 'act',
+    hud: { alert: '' },
+    player: {
+      position: { x: 0, y: 0 },
+      collision_radius: 0.72,
+      bounds: { x_min: -5.8, x_max: 5.8, y_min: -3.75, y_max: 3.55 }
+    },
+    telegraphs: [{ kind: 'boss_heavy_laser_charge', phase: 'telegraph', remaining_s: 0.5 }],
+    hazards: []
+  }, 100);
+  assert.equal(input.has(' ', 150), true);
+  assert.equal(input.has('arrowleft', 150), true);
+  assert.equal(input.has('arrowright', 150), false);
+  input.observe({
+    status: 'act',
+    hud: { alert: '' },
+    player: {
+      position: { x: 0, y: 0 },
+      collision_radius: 0.72,
+      bounds: { x_min: -5.8, x_max: 5.8, y_min: -3.75, y_max: 3.55 }
+    },
+    telegraphs: [{ kind: 'boss_heavy_laser_charge', phase: 'telegraph', remaining_s: 0.4 }],
+    hazards: []
+  }, 200);
+  assert.equal(input.has('arrowleft', 250), true);
+  assert.equal(input.has('arrowright', 250), false);
+  input.observe({
+    status: 'act',
+    hud: { alert: '' },
+    player: {
+      position: { x: 0, y: 0 },
+      collision_radius: 0.72,
+      bounds: { x_min: -5.8, x_max: 5.8, y_min: -3.75, y_max: 3.55 }
+    },
+    telegraphs: [{ kind: 'boss_heavy_laser_charge', phase: 'telegraph', remaining_s: 0.1 }],
+    hazards: []
+  }, 450);
+  assert.equal(input.has('arrowleft', 500), true);
+  assert.equal(input.has('arrowright', 500), false);
+  input.observe({ status: 'act', hud: { alert: '' }, telegraphs: [], hazards: [] }, 850);
+  assert.equal(input.has('arrowleft', 850), false);
+  assert.equal(input.has(' ', 850), true);
+});
 test('timed input uses shipped player speed, diagonal normalization and boundaries', () => {
   const start = html.indexOf('    function updatePlayer(');
   const end = html.indexOf('\n    function ', start + 1);

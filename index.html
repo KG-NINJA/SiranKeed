@@ -514,7 +514,10 @@
     function publishJevObservation(now) {
       if (!publishJev || now - lastJevObservation < 100) return;
       lastJevObservation = now;
-      publishJev(structuredJevObservation(now));
+      const observation = structuredJevObservation(now);
+      jevInput.observe(observation, now);
+      observation.input = jevInput.snapshot(now);
+      publishJev(observation);
     }
 
     function createWireMesh(geometry, fillColor, edgeColor, opacity = 0.38) {
