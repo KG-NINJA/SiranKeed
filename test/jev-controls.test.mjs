@@ -79,9 +79,11 @@ test('telegraph safety overrides a slow Jev action for an immediate lateral dodg
   }, 450);
   assert.equal(input.has('arrowleft', 500), true);
   assert.equal(input.has('arrowright', 500), false);
-  input.observe({ status: 'act', hud: { alert: '' }, telegraphs: [], hazards: [] }, 850);
-  assert.equal(input.has('arrowleft', 850), false);
-  assert.equal(input.has(' ', 850), true);
+  assert.equal(input.has('arrowleft', 500), true);
+  assert.equal(input.has(' ', 500), true);
+  input.observe({ status: 'act', hud: { alert: '' }, telegraphs: [], hazards: [] }, 800);
+  assert.equal(input.has('arrowleft', 800), false);
+  assert.equal(input.has(' ', 800), true);
 });
 test('active beam safety chooses the candidate farthest from its typed line', () => {
   const input = createTimedInput();
