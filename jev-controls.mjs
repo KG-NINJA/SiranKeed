@@ -8,6 +8,8 @@ const directions = {
 };
 
 const safetyDirections = ['left', 'right', 'up', 'down'];
+const safetyMoveMs = 520;
+const safetyDurationMs = 620;
 
 function beamClearanceSquared(beam, point) {
   const start = beam?.axis?.start;
@@ -63,7 +65,7 @@ function safetyDirection(observation, previousDirection) {
   // rather than guessing from the largest axis component. This remains safe
   // when the player is already close to a screen edge or the beam is diagonal.
   if (beam?.axis?.start && beam.axis.end) {
-    const step = 9.2 * 0.28;
+    const step = 9.2 * (safetyMoveMs / 1000);
     const point = { x, y, z: Number(player.position.z) || 0 };
     const edgePreference = y <= Number(bounds.y_min) + margin ? ['up'] :
       (y >= Number(bounds.y_max) - margin ? ['down'] : []);
@@ -114,8 +116,8 @@ export function createTimedInput() {
         safetyOverride = {
           movement: direction,
           fire: true,
-          move_ms: 280,
-          duration_ms: 320,
+          move_ms: safetyMoveMs,
+          duration_ms: safetyDurationMs,
           started: now,
           source: 'telegraph-safety'
         };
