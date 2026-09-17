@@ -45,6 +45,33 @@ to play or deploy the game.
 - `Arrow` or `WASD`: move
 - `Space`: shot
 
+## Optional Jev input panel
+
+Open `?jev=1` to enable a visible, bounded input panel. Paste a Jev-selected action
+and click **Apply Jev action**, for example:
+
+```json
+{"movement":"right","fire":true,"duration_ms":1000,"move_ms":200}
+```
+
+Directions: `stay`, `left`, `right`, `up`, `down`, `up_left`, `up_right`,
+`down_left`, `down_right`. Durations are integer milliseconds: total 50–3000,
+movement 0–total. The existing player update handles movement and shooting with
+unchanged speed, cooldown, limits, damage, enemy behavior and game clock.
+No aiming policy, auto-dodge, pause or invulnerability is added. Invalid actions,
+blur, hidden tabs, restart, stage transitions and terminal states release input.
+The release button cancels immediately. Physical keyboard input still works.
+
+Expand **Screen observation JSON** for a timestamped, 10 Hz DOM observation of
+rendered mesh bounding boxes in canvas CSS pixels, plus the existing HUD. This is
+geometry-based screen telemetry, **not Jev image recognition**. Off-frustum and
+hidden objects are omitted; occlusion by other objects/UI is not resolved. The
+panel does not disclose world positions, collision radii, future spawns or hidden
+enemy state. Stable object IDs allow a consumer to compare consecutive frames.
+It contains no API key, network request or TypeSafe client. An external controller
+must supply fresh observations to Jev and mechanically apply its returned actions.
+Ordinary URLs do not display or calculate screen telemetry.
+
 ## Stages
 
 1. `SPACE FLEET`: enemy formations, star grid, distant allied fleet destruction with polygon debris.
