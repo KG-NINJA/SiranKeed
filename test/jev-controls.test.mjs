@@ -82,8 +82,34 @@ test('telegraph safety overrides a slow Jev action for an immediate lateral dodg
   assert.equal(input.has('arrowleft', 500), true);
   assert.equal(input.has(' ', 500), true);
   input.observe({ status: 'act', hud: { alert: '' }, telegraphs: [], hazards: [] }, 800);
-  assert.equal(input.has('arrowleft', 800), false);
-  assert.equal(input.has(' ', 800), true);
+  assert.equal(input.has('arrowleft', 850), true);
+  assert.equal(input.has(' ', 850), true);
+  input.observe({ status: 'act', hud: { alert: '' }, telegraphs: [], hazards: [] }, 1000);
+  assert.equal(input.has('arrowleft', 1000), false);
+  assert.equal(input.has(' ', 1000), true);
+});
+
+test('active laser refreshes at an edge without releasing movement', () => {
+  const input = createTimedInput();
+  input.submit({ movement: 'stay', fire: true, move_ms: 3000, duration_ms: 3000 }, 0);
+  const bounds = { x_min: -5.8, x_max: 5.8, y_min: -3.75, y_max: 3.55 };
+  input.observe({
+    status: 'act',
+    player: { position: { x: 0, y: 0, z: 4.2 }, collision_radius: 0.72, bounds },
+    telegraphs: [{ kind: 'boss_heavy_laser_charge', phase: 'telegraph', remaining_s: 0.5 }],
+    hazards: []
+  }, 100);
+  assert.equal(input.has('arrowleft', 150), true);
+  input.observe({
+    status: 'act',
+    player: { position: { x: -5.1, y: 0, z: 4.2 }, collision_radius: 0.72, bounds },
+    telegraphs: [],
+    hazards: [{ kind: 'persistent_damage_beam', collision: true,
+      axis: { start: { x: -5.1, y: -3, z: -17 }, end: { x: -5.1, y: 3, z: 23 } } }]
+  }, 900);
+  assert.equal(input.has('arrowleft', 900), false);
+  assert.equal(input.has('arrowdown', 900), true);
+  assert.equal(input.has(' ', 900), true);
 });
 test('active beam safety chooses the candidate farthest from its typed line', () => {
   const input = createTimedInput();
