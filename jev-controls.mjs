@@ -47,6 +47,124 @@ function beamClearanceSquared(beam, point) {
   return dx * dx + dy * dy + dz * dz;
 }
 
+export function projectedContact(relativePosition, relativeVelocity, combinedRadius, horizonS = 3) {
+  const r = {
+    x: Number(relativePosition?.x) || 0,
+    y: Number(relativePosition?.y) || 0,
+    z: Number(relativePosition?.z) || 0
+  };
+  const v = {
+    x: Number(relativeVelocity?.x) || 0,
+    y: Number(relativeVelocity?.y) || 0,
+    z: Number(relativeVelocity?.z) || 0
+  };
+  const radius = Math.max(0, Number(combinedRadius) || 0);
+  const horizon = Math.max(0, Number(horizonS) || 0);
+  const rv = r.x * v.x + r.y * v.y + r.z * v.z;
+  const vv = v.x * v.x + v.y * v.y + v.z * v.z;
+  const rr = r.x * r.x + r.y * r.y + r.z * r.z;
+  const closestTime = vv > 1e-9 ? Math.max(0, Math.min(horizon, -rv / vv)) : 0;
+  const closest = {
+    x: r.x + v.x * closestTime,
+    y: r.y + v.y * closestTime,
+    z: r.z + v.z * closestTime
+  };
+  const closestDistance = Math.hypot(closest.x, closest.y, closest.z);
+  let contactTime = rr <= radius * radius ? 0 : null;
+  if (contactTime === null && vv > 1e-9) {
+    const b = 2 * rv;
+    const c = rr - radius * radius;
+    const discriminant = b * b - 4 * vv * c;
+    if (discriminant >= 0) {
+      const root = Math.sqrt(discriminant);
+      const times = [(-b - root) / (2 * vv), (-b + root) / (2 * vv)]
+        .filter(value => value >= 0 && value <= horizon)
+        .sort((a, bValue) => a - bValue);
+      if (times.length) contactTime = times[0];
+    }
+  }
+  return {
+    time_to_contact_s: contactTime,
+    closest_approach_s: closestTime,
+    closest_clearance: closestDistance - radius,
+    closing: rv < 0,
+    horizon_s: horizon
+  };
+}
+
+const movementVectors = {
+  stay: [0, 0], left: [-1, 0], right: [1, 0], up: [0, 1], down: [0, -1],
+  up_left: [-0.707, 0.707], up_right: [0.707, 0.707],
+  down_left: [-0.707, -0.707], down_right: [0.707, -0.707]
+};
+
+function observationSample(observation, now) {
+  const position = observation?.player?.position;
+  if (!position) return null;
+  return {
+    now,
+    status: observation.status,
+    position: { x: Number(position.x) || 0, y: Number(position.y) || 0, z: Number(position.z) || 0 },
+    bounds: observation.player.bounds || null,
+    speedMultiplier: Number(observation.player.speed_multiplier) || 1,
+    lives: Number(observation.hud?.lives) || 0,
+    shield: Number(observation.hud?.shield) || 0,
+    bossHp: Number.isFinite(observation.hud?.boss_hp) ? Number(observation.hud.boss_hp) : null
+  };
+}
+
+function atMovementBoundary(sample, movement) {
+  const bounds = sample?.bounds;
+  if (!bounds) return false;
+  const epsilon = 0.04;
+  return (movement.includes('left') && sample.position.x <= Number(bounds.x_min) + epsilon) ||
+    (movement.includes('right') && sample.position.x >= Number(bounds.x_max) - epsilon) ||
+    (movement.includes('up') && sample.position.y >= Number(bounds.y_max) - epsilon) ||
+    (movement.includes('down') && sample.position.y <= Number(bounds.y_min) + epsilon);
+}
+
+function controlResult(trace, sample, completed) {
+  if (!trace || !sample) return null;
+  const elapsedMs = Math.max(0, sample.now - trace.started);
+  const delta = {
+    x: sample.position.x - trace.start.position.x,
+    y: sample.position.y - trace.start.position.y,
+    z: sample.position.z - trace.start.position.z
+  };
+  const [mx, my] = movementVectors[trace.action.movement] || [0, 0];
+  const commandedProgress = delta.x * mx + delta.y * my;
+  const movementElapsedBeforeTrace = Math.max(0, trace.started - trace.action.started);
+  const trackedMoveMs = Math.max(0, trace.action.move_ms - movementElapsedBeforeTrace);
+  const expectedDisplacement = (mx || my) ? 9.2 * trace.start.speedMultiplier *
+    Math.min(elapsedMs, trackedMoveMs) / 1000 : 0;
+  const boundary = atMovementBoundary(sample, trace.action.movement);
+  return {
+    movement: trace.action.movement,
+    fire: trace.action.fire,
+    source: trace.action.source || 'jev',
+    observation_seq: Number.isInteger(trace.action.observation_seq) ? trace.action.observation_seq : null,
+    elapsed_ms: Math.round(elapsedMs),
+    completed,
+    actual_displacement: {
+      x: Math.round(delta.x * 1000) / 1000,
+      y: Math.round(delta.y * 1000) / 1000,
+      z: Math.round(delta.z * 1000) / 1000,
+      distance: Math.round(Math.hypot(delta.x, delta.y, delta.z) * 1000) / 1000
+    },
+    commanded_progress: Math.round(commandedProgress * 1000) / 1000,
+    expected_displacement: Math.round(expectedDisplacement * 1000) / 1000,
+    progress_ratio: expectedDisplacement > 0 ?
+      Math.round((commandedProgress / expectedDisplacement) * 1000) / 1000 : null,
+    movement_effective: trace.action.movement === 'stay' ? null : commandedProgress > 0.05 || boundary,
+    blocked_by_boundary: boundary,
+    lives_lost: Math.max(0, trace.start.lives - sample.lives),
+    shield_lost: Math.max(0, trace.start.shield - sample.shield),
+    boss_damage: trace.start.bossHp === null || sample.bossHp === null ? null :
+      Math.max(0, Math.round((trace.start.bossHp - sample.bossHp) * 1000) / 1000),
+    terminal_status: sample.status === 'act' ? null : sample.status
+  };
+}
+
 function safetyDirection(observation, previousDirection) {
   if (!observation || observation.status !== 'act') return null;
   const player = observation.player;
@@ -114,16 +232,54 @@ export function createTimedInput() {
   let active = null;
   let safetyOverride = null;
   let previousSafetyDirection = null;
+  let controlTrace = null;
+  let previousControl = null;
+
+  function current(now) {
+    if (safetyOverride && now - safetyOverride.started < safetyOverride.duration_ms) return safetyOverride;
+    if (active && now - active.started < active.duration_ms) return active;
+    return null;
+  }
+
+  function updateControlTrace(observation, now) {
+    const action = current(now);
+    const sample = observationSample(observation, now);
+    if (!sample) return;
+    const key = action ? `${action.source || 'jev'}:${action.started}` : null;
+    if (!action) {
+      if (controlTrace) previousControl = controlResult(controlTrace, controlTrace.last, true);
+      controlTrace = null;
+      return;
+    }
+    if (!controlTrace || controlTrace.key !== key) {
+      if (controlTrace) previousControl = controlResult(controlTrace, controlTrace.last, true);
+      controlTrace = { key, action: { ...action }, started: now, start: sample, last: sample };
+    } else {
+      controlTrace.last = sample;
+    }
+  }
+
   return {
-    submit(value, now) {
+    submit(value, now, metadata = {}) {
       active = null; // A malformed replacement must also release old input.
       if (!value || !Object.hasOwn(directions, value.movement) ||
           typeof value.fire !== 'boolean' ||
           !Number.isInteger(value.duration_ms) || value.duration_ms < 50 || value.duration_ms > 3000 ||
-          !Number.isInteger(value.move_ms) || value.move_ms < 0 || value.move_ms > value.duration_ms) {
-        throw new Error('movement: stay/left/right/up/down/diagonals; fire: boolean; duration_ms: 50..3000; move_ms: 0..duration_ms');
+          !Number.isInteger(value.move_ms) || value.move_ms < 0 || value.move_ms > value.duration_ms ||
+          (value.observation_seq !== undefined && (!Number.isInteger(value.observation_seq) || value.observation_seq < 0))) {
+        throw new Error('movement: stay/left/right/up/down/diagonals; fire: boolean; duration_ms: 50..3000; move_ms: 0..duration_ms; optional observation_seq: non-negative integer');
       }
-      active = { ...value, started: now };
+      active = {
+        movement: value.movement,
+        fire: value.fire,
+        move_ms: value.move_ms,
+        duration_ms: value.duration_ms,
+        started: now,
+        observation_seq: Number.isInteger(value.observation_seq) ? value.observation_seq :
+          (Number.isInteger(metadata.observation_seq) ? metadata.observation_seq : null),
+        observation_to_action_ms: Number.isFinite(metadata.observation_to_action_ms) ?
+          Math.max(0, Math.round(metadata.observation_to_action_ms)) : null
+      };
     },
     observe(observation, now) {
       const direction = safetyDirection(observation, previousSafetyDirection);
@@ -146,28 +302,51 @@ export function createTimedInput() {
           move_ms: safetyMoveMs,
           duration_ms: safetyDurationMs,
           started: now,
-          source: 'telegraph-safety'
+          source: 'telegraph-safety',
+          observation_seq: Number.isInteger(observation.seq) ? observation.seq : null,
+          observation_to_action_ms: 0
         };
       } else if (safetyOverride && now - safetyOverride.started >= safetyOverride.duration_ms) {
         safetyOverride = null;
       }
+      updateControlTrace(observation, now);
     },
     cancel() {
       active = null;
       safetyOverride = null;
       previousSafetyDirection = null;
+      controlTrace = null;
+      previousControl = null;
     },
     has(key, now) {
-      const current = safetyOverride && now - safetyOverride.started < safetyOverride.duration_ms ?
-        safetyOverride : active;
-      if (!current || now - current.started >= current.duration_ms) return false;
-      return key === ' ' ? current.fire :
-        now - current.started < current.move_ms && directions[current.movement].includes(key);
+      const action = current(now);
+      if (!action) return false;
+      return key === ' ' ? action.fire :
+        now - action.started < action.move_ms && directions[action.movement].includes(key);
     },
     snapshot(now) {
-      const current = safetyOverride && now - safetyOverride.started < safetyOverride.duration_ms ?
-        safetyOverride : active;
-      return current ? { ...current, remaining_ms: Math.max(0, Math.round(current.duration_ms - (now - current.started))) } : null;
+      const action = current(now);
+      return action ? { ...action, remaining_ms: Math.max(0, Math.round(action.duration_ms - (now - action.started))) } : null;
+    },
+    timing(now) {
+      const action = current(now);
+      return action ? {
+        decision_observation_seq: Number.isInteger(action.observation_seq) ? action.observation_seq : null,
+        observation_to_action_ms: Number.isFinite(action.observation_to_action_ms) ? action.observation_to_action_ms : null,
+        action_age_ms: Math.max(0, Math.round(now - action.started)),
+        action_remaining_ms: Math.max(0, Math.round(action.duration_ms - (now - action.started)))
+      } : {
+        decision_observation_seq: null,
+        observation_to_action_ms: null,
+        action_age_ms: null,
+        action_remaining_ms: null
+      };
+    },
+    feedback(now) {
+      return {
+        current: controlTrace ? controlResult(controlTrace, controlTrace.last, false) : null,
+        previous: previousControl
+      };
     }
   };
 }
@@ -198,10 +377,12 @@ export function screenObject(THREE, mesh, camera, width, height) {
 }
 
 export function mountJevPanel(input, isPlaying) {
+  let latestObservation = null;
+  const observationTimes = new Map();
   const panel = document.createElement('section');
   panel.id = 'jev-panel';
   panel.setAttribute('aria-label', 'Jev controls');
-  panel.innerHTML = `<strong>Jev input / structured game state v2</strong>
+  panel.innerHTML = `<strong>Jev input / structured game state v3</strong>
     <p>DOOMデモ型: 現在フレームの構造化状態を渡し、Jevの有限操作を最大3秒だけ実行。</p>
     <label>Jev action JSON<textarea aria-label="Jev action JSON" rows="3">{"movement":"stay","fire":false,"duration_ms":1000,"move_ms":0}</textarea></label>
     <button type="button" id="jev-apply">Apply Jev action</button>
@@ -214,7 +395,13 @@ export function mountJevPanel(input, isPlaying) {
     try {
       if (!isPlaying()) throw new Error('Start the game first');
       const action = JSON.parse(panel.querySelector('textarea').value);
-      input.submit(action, performance.now());
+      const now = performance.now();
+      const observationSeq = Number.isInteger(action.observation_seq) ? action.observation_seq : latestObservation?.seq;
+      const observedAt = observationTimes.get(observationSeq);
+      input.submit(action, now, {
+        observation_seq: observationSeq,
+        observation_to_action_ms: Number.isFinite(observedAt) ? now - observedAt : null
+      });
       result.textContent = `Applied ${JSON.stringify(action)}`;
     } catch (error) {
       input.cancel();
@@ -224,5 +411,10 @@ export function mountJevPanel(input, isPlaying) {
   panel.querySelector('#jev-stop').onclick = () => { input.cancel(); result.textContent = 'Released'; };
   window.addEventListener('blur', () => input.cancel());
   document.addEventListener('visibilitychange', () => { if (document.hidden) input.cancel(); });
-  return observation => { panel.querySelector('pre').textContent = JSON.stringify(observation); };
+  return observation => {
+    latestObservation = observation;
+    observationTimes.set(observation.seq, performance.now());
+    while (observationTimes.size > 64) observationTimes.delete(observationTimes.keys().next().value);
+    panel.querySelector('pre').textContent = JSON.stringify(observation);
+  };
 }

@@ -231,7 +231,7 @@
 
   <script type="module">
     import * as THREE from "three";
-    import { createTimedInput, mountJevPanel } from './jev-controls.mjs';
+    import { createTimedInput, mountJevPanel, projectedContact } from './jev-controls.mjs';
 
     const root = document.getElementById("game");
     const hud = {
@@ -364,6 +364,28 @@
         (entity?.y || 0) - (player?.y || 0), (entity?.z || 0) - (player?.z || 0));
     }
 
+    function structuredCollisionPrediction(entity, player) {
+      if (!entity || !player) return {};
+      const relative = relativePosition(entity, player);
+      const entityVelocity = objectVelocity(entity);
+      const playerVelocity = objectVelocity(player);
+      const prediction = projectedContact(relative, {
+        x: entityVelocity.x - playerVelocity.x,
+        y: entityVelocity.y - playerVelocity.y,
+        z: entityVelocity.z - playerVelocity.z
+      }, (Number(entity.radius) || 0) + (Number(player.radius) || 0.72), 3);
+      return {
+        projected_contact: {
+          time_to_contact_s: Number.isFinite(prediction.time_to_contact_s) ?
+            roundStateNumber(prediction.time_to_contact_s) : null,
+          closest_approach_s: roundStateNumber(prediction.closest_approach_s),
+          closest_clearance: roundStateNumber(prediction.closest_clearance),
+          closing: prediction.closing,
+          horizon_s: prediction.horizon_s
+        }
+      };
+    }
+
     function structuredObject(entity, kind, player, extra = {}) {
       if (!entity || entity.dead) return null;
       return {
@@ -389,6 +411,7 @@
       const end = beam.localToWorld(new THREE.Vector3(0, height / 2, 0));
       const center = start.clone().add(end).multiplyScalar(0.5);
       const axis = end.clone().sub(start).normalize();
+      const intersectsPlayer = player ? bossHeavyLaserHitsPlayer(effect, player) : false;
       const beamState = {
         id: stateObjectId(effect),
         kind: 'persistent_damage_beam',
@@ -399,7 +422,15 @@
         axis: { start: vectorState(start.x, start.y, start.z), end: vectorState(end.x, end.y, end.z), direction: vectorState(axis.x, axis.y, axis.z) },
         radius: { start: roundStateNumber(radiusBottom * effect.mesh.scale.x), end: roundStateNumber(radiusTop * effect.mesh.scale.x) },
         relative_to_player: vectorState(center.x - (player?.x || 0), center.y - (player?.y || 0), center.z - (player?.z || 0)),
-        remaining_s: roundStateNumber(Math.max(0, effect.ttl - effect.age))
+        remaining_s: roundStateNumber(Math.max(0, effect.ttl - effect.age)),
+        intersects_player: intersectsPlayer,
+        damage_armed: effect.age >= 0.18 && !effect.hitDone,
+        projected_contact: {
+          time_to_contact_s: intersectsPlayer ? 0 : null,
+          time_to_damage_s: intersectsPlayer && !effect.hitDone ? roundStateNumber(Math.max(0, 0.18 - effect.age)) : null,
+          closing: intersectsPlayer,
+          horizon_s: roundStateNumber(Math.max(0, effect.ttl - effect.age))
+        }
       };
       return beamState;
     }
@@ -440,7 +471,10 @@
           });
           if (target) targets.push(target);
         } else if (structuredHazardTypes.has(entity.type)) {
-          const hazard = structuredObject(entity, entity.type, player, { collision_kind: 'solid_body' });
+          const hazard = structuredObject(entity, entity.type, player, {
+            collision_kind: 'solid_body',
+            ...structuredCollisionPrediction(entity, player)
+          });
           if (hazard) hazards.push(hazard);
           if (entity.type === 'enemy' || entity.type === 'missile') {
             const target = structuredObject(entity, entity.type, player, { targetable: true });
@@ -452,7 +486,8 @@
         const hazard = structuredObject(projectile, 'enemy_projectile', player, {
           collision_kind: 'projectile',
           projectile_type: projectile.type,
-          gravity: roundStateNumber(projectile.gravity || 0)
+          gravity: roundStateNumber(projectile.gravity || 0),
+          ...structuredCollisionPrediction(projectile, player)
         });
         if (hazard) hazards.push(hazard);
       }
@@ -462,7 +497,8 @@
           const telegraph = structuredObject(effect.boss, 'boss_heavy_laser_charge', player, {
             collision: false,
             phase: 'telegraph',
-            remaining_s: roundStateNumber(Math.max(0, effect.ttl - effect.age))
+            remaining_s: roundStateNumber(Math.max(0, effect.ttl - effect.age)),
+            time_to_fire_s: roundStateNumber(Math.max(0, effect.ttl - effect.age))
           });
           if (telegraph) telegraphs.push(telegraph);
         } else if (effect.type === 'bossHeavyLaser') {
@@ -471,7 +507,7 @@
         }
       }
       return {
-        version: 2,
+        version: 3,
         seq: ++jevSequence,
         captured_at: new Date().toISOString(),
         source: 'current game state adapter; no screenshot recognition or historical frame',
@@ -504,6 +540,7 @@
           fire: [true, false],
           duration_ms: { min: 50, max: 3000 },
           move_ms: { min: 0, max: 3000 },
+          observation_seq: 'copy this state seq into the action when available',
           rule: 'choose one finite action from this current state; input is released on expiry'
         },
         input: jevInput.snapshot(now),
@@ -513,10 +550,29 @@
 
     function publishJevObservation(now) {
       if (!publishJev || now - lastJevObservation < 100) return;
+      const observationIntervalMs = lastJevObservation > 0 ? now - lastJevObservation : null;
       lastJevObservation = now;
       const observation = structuredJevObservation(now);
       jevInput.observe(observation, now);
       observation.input = jevInput.snapshot(now);
+      const timing = jevInput.timing(now);
+      const laserTimes = observation.telegraphs
+        .filter(item => item.kind === 'boss_heavy_laser_charge' && Number.isFinite(item.time_to_fire_s))
+        .map(item => item.time_to_fire_s);
+      const contactTimes = observation.hazards
+        .map(item => item.projected_contact?.time_to_contact_s)
+        .filter(Number.isFinite);
+      observation.reaction_timing = {
+        target_observation_interval_ms: 100,
+        observation_interval_ms: Number.isFinite(observationIntervalMs) ? Math.round(observationIntervalMs) : null,
+        decision_observation_seq: timing.decision_observation_seq,
+        observation_to_action_ms: timing.observation_to_action_ms,
+        action_age_ms: timing.action_age_ms,
+        action_remaining_ms: timing.action_remaining_ms,
+        laser_time_to_fire_ms: laserTimes.length ? Math.round(Math.min(...laserTimes) * 1000) : null,
+        nearest_hazard_contact_ms: contactTimes.length ? Math.round(Math.min(...contactTimes) * 1000) : null
+      };
+      observation.recent_control = jevInput.feedback(now);
       publishJev(observation);
     }
 
