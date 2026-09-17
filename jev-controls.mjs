@@ -1,4 +1,5 @@
-// Bounded UI input, not a policy: all directions are chosen by the caller.
+// Bounded UI input. Jev chooses ordinary actions; typed laser telegraphs may
+// briefly take a deterministic safety override before those actions are read.
 const directions = {
   stay: [], left: ['arrowleft'], right: ['arrowright'],
   up: ['arrowup'], down: ['arrowdown'],
@@ -6,8 +7,61 @@ const directions = {
   down_left: ['arrowdown', 'arrowleft'], down_right: ['arrowdown', 'arrowright']
 };
 
+const safetyDirections = ['left', 'right', 'up', 'down'];
+
+function safetyDirection(observation, previousDirection) {
+  if (!observation || observation.status !== 'act') return null;
+  const player = observation.player;
+  const bounds = player?.bounds;
+  if (!player?.position || !bounds) return null;
+
+  const telegraph = (observation.telegraphs || []).some(item =>
+    item?.kind === 'boss_heavy_laser_charge' && item.phase === 'telegraph' &&
+    Number(item.remaining_s) <= 0.75);
+  const beam = (observation.hazards || []).find(item =>
+    item?.kind === 'persistent_damage_beam' && item.collision === true);
+  const urgent = telegraph || beam;
+  if (!urgent) return null;
+
+  const radius = Number(player.collision_radius) || 0.72;
+  const margin = Math.max(0.9, radius * 1.8);
+  const x = Number(player.position.x) || 0;
+  const y = Number(player.position.y) || 0;
+  const safe = {
+    left: x > Number(bounds.x_min) + margin,
+    right: x < Number(bounds.x_max) - margin,
+    up: y < Number(bounds.y_max) - margin,
+    down: y > Number(bounds.y_min) + margin
+  };
+  const available = safetyDirections.filter(direction => safe[direction]);
+  if (!available.length) return null;
+
+  // Keep the same escape direction throughout one charge window. Reversing
+  // every 100 ms would cancel displacement just when the beam is about to fire.
+  if (telegraph && previousDirection && safe[previousDirection]) return previousDirection;
+
+  // Move perpendicular to an already active beam when its typed axis is clear.
+  if (beam?.axis?.direction) {
+    const axisX = Math.abs(Number(beam.axis.direction.x) || 0);
+    const axisY = Math.abs(Number(beam.axis.direction.y) || 0);
+    const perpendicular = axisX >= axisY ? ['up', 'down'] : ['left', 'right'];
+    const escape = perpendicular.find(direction => safe[direction]);
+    if (escape) return escape;
+  }
+
+  // During the charge, choose a lateral escape when possible so the input
+  // layer reacts within the telegraph window instead of waiting for Jev.
+  const lateral = previousDirection === 'left' ? 'right' : 'left';
+  if (safe[lateral]) return lateral;
+  if (safe.up && (!previousDirection || previousDirection === 'down')) return 'up';
+  if (safe.down) return 'down';
+  return available[0];
+}
+
 export function createTimedInput() {
   let active = null;
+  let safetyOverride = null;
+  let previousSafetyDirection = null;
   return {
     submit(value, now) {
       active = null; // A malformed replacement must also release old input.
@@ -19,14 +73,39 @@ export function createTimedInput() {
       }
       active = { ...value, started: now };
     },
-    cancel() { active = null; },
+    observe(observation, now) {
+      const direction = safetyDirection(observation, previousSafetyDirection);
+      const safetyActive = safetyOverride && now - safetyOverride.started < safetyOverride.duration_ms;
+      if (direction && !safetyActive) {
+        previousSafetyDirection = direction;
+        safetyOverride = {
+          movement: direction,
+          fire: true,
+          move_ms: 280,
+          duration_ms: 320,
+          started: now,
+          source: 'telegraph-safety'
+        };
+      } else if (safetyOverride && now - safetyOverride.started >= safetyOverride.duration_ms) {
+        safetyOverride = null;
+      }
+    },
+    cancel() {
+      active = null;
+      safetyOverride = null;
+      previousSafetyDirection = null;
+    },
     has(key, now) {
-      if (!active || now - active.started >= active.duration_ms) return false;
-      return key === ' ' ? active.fire :
-        now - active.started < active.move_ms && directions[active.movement].includes(key);
+      const current = safetyOverride && now - safetyOverride.started < safetyOverride.duration_ms ?
+        safetyOverride : active;
+      if (!current || now - current.started >= current.duration_ms) return false;
+      return key === ' ' ? current.fire :
+        now - current.started < current.move_ms && directions[current.movement].includes(key);
     },
     snapshot(now) {
-      return active ? { ...active, remaining_ms: Math.max(0, Math.round(active.duration_ms - (now - active.started))) } : null;
+      const current = safetyOverride && now - safetyOverride.started < safetyOverride.duration_ms ?
+        safetyOverride : active;
+      return current ? { ...current, remaining_ms: Math.max(0, Math.round(current.duration_ms - (now - current.started))) } : null;
     }
   };
 }

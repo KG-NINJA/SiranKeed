@@ -58,9 +58,13 @@ Directions: `stay`, `left`, `right`, `up`, `down`, `up_left`, `up_right`,
 `down_left`, `down_right`. Durations are integer milliseconds: total 50–3000,
 movement 0–total. The existing player update handles movement and shooting with
 unchanged speed, cooldown, limits, damage, enemy behavior and game clock.
-No aiming policy, auto-dodge, pause or invulnerability is added. Invalid actions,
-blur, hidden tabs, restart, stage transitions and terminal states release input.
-The release button cancels immediately. Physical keyboard input still works.
+During play, a typed `boss_heavy_laser_charge` telegraph or active
+`persistent_damage_beam` can briefly take a deterministic 320 ms safety override
+so a slow Jev decision cannot wait through the 0.75 s charge window. The guard
+only uses the current structured player bounds and beam axis; it does not infer
+unseen threats or choose ordinary positioning. Invalid actions, blur, hidden
+tabs, restart, stage transitions and terminal states release input. The release
+button cancels immediately. Physical keyboard input still works.
 
 Expand **Structured game state JSON** for a timestamped, 10 Hz current-state
 observation modeled on the TypeSafe Doom demo. It contains typed game state rather
